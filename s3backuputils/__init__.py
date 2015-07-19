@@ -1,18 +1,20 @@
 import tarfile
 import os
+import dateutil.parser
 from datetime import datetime
-from boto3.session import Session
+import time
+from boto.s3.connection import S3Connection
+from boto.s3.key import Key
+
 
 class TarHelper:
 
     archive_path = None
     target_path = None
-    s3_client = None
 
-    def __init__(self, archive_path, target_path, s3_client=None):
+    def __init__(self, archive_path, target_path):
         self.archive_path = archive_path
         self.target_path = target_path
-        self.s3_client = s3_client
 
     def delete(self):
         os.remove(self.archive_path)
@@ -25,13 +27,11 @@ class TarHelper:
         with tarfile.open(self.archive_path, 'r:gz') as tar:
             tar.extractall(self.target_path)
 
-    def tar_to_s3(self, bucket_name, prefix, profile_name=None, delete=True):
+    def tar_to_s3(self, bucket_name, prefix, delete=True):
         self.create()
         s3_helper = S3BucketHelper(
             bucket_name,
-            prefix,
-            client=self.s3_client,
-            profile_name=None
+            prefix
         )
 
         s3_helper.upload(self.archive_path)
@@ -43,36 +43,39 @@ class TarHelper:
 class S3BucketHelper:
 
     _client = None
+    _bucket = None
 
     profile_name = None
     bucket_name = None
     prefix = None
 
     @property
+    def bucket(self):
+        if self._bucket is None:
+            self._bucket = self.client.get_bucket(
+                self.bucket_name,
+                validate=False
+            )
+        return self._bucket
+
+    @property
     def client(self):
         if self._client is None:
-            self._client = Session(profile_name=self.profile_name).client('s3')
+            self._client = S3Connection()
         return self._client
 
     @client.setter
     def client(self, value):
         self._client = value
 
-    def __init__(self, bucket_name=None, prefix=None, profile_name=None, client=None):
+    def __init__(self, bucket_name=None, prefix=None):
         self.bucket_name = bucket_name
         self.prefix = prefix
-        self.profile_name = profile_name
-        self.client = client
 
     def upload(self, file_path):
-        key = '{0}{1}'.format(self.prefix, os.path.basename(file_path))
-        data = open(file_path, 'rb')
-        self.client.put_object(
-            Bucket=self.bucket_name,
-            Key=key,
-            Body=data,
-            ServerSideEncryption='AES256',
-        )
+        keyname = '{0}{1}'.format(self.prefix, os.path.basename(file_path))
+        key = Key(self.bucket, keyname)
+        key.set_contents_from_filename(file_path, encrypt_key=True)
 
     def get_most_recent_key(self):
         keys = self.get_most_recent_keys(1)
@@ -83,33 +86,16 @@ class S3BucketHelper:
         return keys[0:min(number, len(keys))] if keys else []
 
     def get_keys_by_last_modified(self, reverse=True):
-
-        next_marker = ''
-        max_keys = 1000
-        store = {}
-        while True:
-            response = self.client.list_objects(
-                Bucket=self.bucket_name,
-                Prefix=self.prefix,
-                MaxKeys=max_keys,
-                Marker=next_marker
-            )
-
-            if 'Contents' not in response:
-                return []
-
-            store.update({o['Key']: o['LastModified'] for o in response['Contents']})
-
-            if response['IsTruncated']:
-                next_marker = response['Contents'][-1]['Key']
-            else:
-                break
+        store = {
+            o.name: time.mktime(dateutil.parser.parse(o.last_modified).timetuple())
+            for o in self.bucket.list(prefix=self.prefix)
+        }
 
         return sorted(store, key=store.get, reverse=reverse)
 
     def download(self, key, destination):
         os.makedirs(os.path.dirname(os.path.abspath(destination)))
-        self.client.download_file(self.bucket_name, key, destination)
+        Key(self.bucket, key).get_contents_to_filename(destination)
 
     def get_tar_helper(self, archive_path, target_path, most_recent=False, key=None):
 
@@ -119,14 +105,11 @@ class S3BucketHelper:
         self.download(key, archive_path)
         return TarHelper(
             os.path.abspath(archive_path),
-            target_path,
-            s3_client=self.client
+            target_path
         )
 
     def prune(self, threshold_seconds):
         keys = self.get_keys_by_last_modified()
         min_time = datetime.utcnow() - datetime.timedelta(seconds=threshold_seconds)
-        deletes = [o for o in keys if o['LastModified'] < min_time]
-        delete_batches = [deletes[i:i+1000] for i in range(0, len(deletes), 1000)]
-        for batch in delete_batches:
-            self.client.delete_objects(Bucket=self.bucket_name, Deletes={'Objects': batch})
+        deletes = [k for k, v in keys.iteritems() if v < min_time]
+        self.bucket.delete_keys(deletes)

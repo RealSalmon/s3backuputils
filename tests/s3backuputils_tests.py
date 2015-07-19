@@ -3,8 +3,9 @@ import shutil
 import os.path
 from nose.tools import *
 from moto import mock_s3
-from boto3.session import Session
 from s3backuputils import TarHelper, S3BucketHelper
+from boto.s3.connection import S3Connection
+from boto.s3.key import Key
 
 _outdir = os.path.join(os.path.dirname(__file__), 'outfiles')
 
@@ -23,13 +24,41 @@ def test_basic():
     os.path.isdir(_outdir)
 
 
+def test_write():
+    with open(_outdir+'/testout', 'w') as f:
+        f.write('hey!')
+
+    assert os.path.isfile(_outdir+'/testout')
+
 @mock_s3
-def test_mock_s3_bucket():
+def test_write_to_s3():
+
+    filepath = os.path.join(_outdir, str(uuid.uuid4()))
     bucket_name = str(uuid.uuid4())
-    client = Session().client('s3')
-    client.create_bucket(Bucket=bucket_name)
-    response = client.list_buckets()
-    assert bucket_name == response['Buckets'][0]['Name']
+    contents = str(uuid.uuid4())
+
+    with open(filepath, 'w') as f:
+        f.write(contents)
+
+    conn = S3Connection()
+    conn.create_bucket(bucket_name)
+
+    bucket = conn.get_bucket(bucket_name)
+    key = Key(bucket, os.path.basename(filepath))
+    key.set_contents_from_filename(filepath)
+
+    xkey = Key(bucket, os.path.basename(filepath))
+    assert xkey.get_contents_as_string() == contents
+
+
+@mock_s3
+def test_create_s3_bucket():
+    bucket_name = str(uuid.uuid4())
+    conn = S3Connection()
+    conn.create_bucket(bucket_name)
+
+    response = conn.get_all_buckets()
+    assert bucket_name == response[0].name
 
 
 @mock_s3
@@ -39,20 +68,18 @@ def test_tar_to_s3():
     prefix = '{0}/'.format(str(uuid.uuid4()))
     tar_name = '{0}.tar.gz'.format(str(uuid.uuid4()))
 
-    client = Session().client('s3')
-    client.create_bucket(Bucket=bucket_name)
+    conn = S3Connection()
+    conn.create_bucket(bucket_name)
 
     tar = TarHelper(
         os.path.join(_outdir, tar_name),
-        os.path.join(os.path.dirname(__file__), 'testfiles'),
-        s3_client=client
+        os.path.join(os.path.dirname(__file__), 'testfiles')
     )
     tar.tar_to_s3(bucket_name=bucket_name, prefix=prefix)
 
     bucket = S3BucketHelper(
         bucket_name=bucket_name,
-        prefix=prefix,
-        client=client
+        prefix=prefix
     )
 
     assert bucket.get_most_recent_key() == '{0}{1}'.format(prefix, tar_name)
@@ -65,20 +92,18 @@ def test_untar_from_s3():
     prefix = '{0}/'.format(str(uuid.uuid4()))
     tar_name = '{0}.tar.gz'.format(str(uuid.uuid4()))
 
-    client = Session().client('s3')
-    client.create_bucket(Bucket=bucket_name)
+    conn = S3Connection()
+    conn.create_bucket(bucket_name)
 
     tar = TarHelper(
         os.path.join(_outdir, tar_name),
-        os.path.join(os.path.dirname(__file__), 'testfiles'),
-        s3_client=client
+        os.path.join(os.path.dirname(__file__), 'testfiles')
     )
     tar.tar_to_s3(bucket_name=bucket_name, prefix=prefix)
 
     bucket = S3BucketHelper(
         bucket_name=bucket_name,
-        prefix=prefix,
-        client=client
+        prefix=prefix
     )
 
     assert bucket.get_most_recent_key() == '{0}{1}'.format(prefix, tar_name)
