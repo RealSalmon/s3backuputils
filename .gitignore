@@ -4,3 +4,5 @@
 *.pyc
 *.pyo
 .tox
+.coverage
+s3backuputils.egg-info

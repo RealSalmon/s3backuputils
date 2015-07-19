@@ -1,5 +1,8 @@
 language: python
 install:
   - pip install .
+  - pip install coveralls coverage
 script:
   - tox
+after_success:
+  coveralls
