@@ -6,3 +6,4 @@
 .tox
 .coverage
 s3backuputils.egg-info
+venv
