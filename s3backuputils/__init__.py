@@ -82,16 +82,18 @@ class S3BucketHelper:
         return keys[0] if len(keys) > 0 else None
 
     def get_most_recent_keys(self, number):
-        keys = self.get_keys_by_last_modified()
+        keys = [x['name'] for x in self.get_keys_by_last_modified()]
         return keys[0:min(number, len(keys))] if keys else []
 
     def get_keys_by_last_modified(self, reverse=True):
-        store = {
-            o.name: time.mktime(dateutil.parser.parse(o.last_modified).timetuple())
-            for o in self.bucket.list(prefix=self.prefix)
-        }
 
-        return sorted(store, key=store.get, reverse=reverse)
+        store = [
+            {'name': o.name,
+             'time': time.mktime(dateutil.parser.parse(o.last_modified).utctimetuple())}
+            for o in self.bucket.list(prefix=self.prefix)]
+
+        store.sort(key=lambda j: j['time'], reverse=reverse)
+        return store
 
     def download(self, key, destination):
         os.makedirs(os.path.dirname(os.path.abspath(destination)))
@@ -110,6 +112,8 @@ class S3BucketHelper:
 
     def prune(self, threshold_seconds):
         keys = self.get_keys_by_last_modified()
-        min_time = datetime.utcnow() - datetime.timedelta(seconds=threshold_seconds)
-        deletes = [k for k, v in keys.iteritems() if v < min_time]
+        min_time = time.mktime(datetime.utcnow().utctimetuple()) - float(threshold_seconds)
+
+        deletes = [o['name'] for o in keys if o['time'] < min_time]
+
         self.bucket.delete_keys(deletes)

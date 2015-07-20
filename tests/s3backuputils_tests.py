@@ -1,6 +1,7 @@
 import uuid
 import shutil
 import os.path
+import time
 from nose.tools import *
 from moto import mock_s3
 from s3backuputils import TarHelper, S3BucketHelper
@@ -134,3 +135,40 @@ def test_untar_from_s3():
         assert os.path.isdir(dirpath)
         for xfile in range(1, 10):
             assert os.path.isfile(os.path.join(dirpath, 'file_{0}'.format(xfile)))
+
+
+@mock_s3
+def test_prune():
+
+    bucket_name = str(uuid.uuid4())
+    prefix = '{0}/'.format(str(uuid.uuid4()))
+
+    conn = S3Connection()
+    conn.create_bucket(bucket_name)
+
+    bucket = conn.get_bucket(bucket_name)
+
+    for i in range(2000):
+        key_name = '{0}{1}'.format(prefix, str(uuid.uuid4()))
+        key = Key(bucket, key_name)
+        key.set_contents_from_string(str(uuid.uuid4()))
+
+    helper = S3BucketHelper(bucket_name, prefix)
+    assert len(helper.get_keys_by_last_modified()) == 2000
+
+    time.sleep(15)
+
+    keys = []
+    for i in range(100):
+        key_name = '{0}{1}'.format(prefix, str(uuid.uuid4()))
+        keys.append(key_name)
+        key = Key(bucket, key_name)
+        key.set_contents_from_string(str(uuid.uuid4()))
+
+    assert len(helper.get_keys_by_last_modified()) == 2100
+    helper.prune(10)
+
+    helper2 = S3BucketHelper(bucket_name, prefix)
+    current_keys = helper2.get_keys_by_last_modified()
+    assert len(current_keys) == 100
+    assert len([k for k in current_keys if k['name'] in keys]) == 100
