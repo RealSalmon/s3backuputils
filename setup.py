@@ -10,9 +10,9 @@ config = {
     'download_url': 'http://github.com/RealSamon/s3backuputils',
     'author_email': 'ben.jones@superutility.net',
     'version': '0.1',
-    'install_requires': ['boto', 'python-dateutil', 'nose', 'coverage', 'moto', 'tox'],
+    'install_requires': ['boto', 'python-dateutil', 'jinja2', 'nose', 'coverage', 'moto', 'tox'],
     'packages': ['s3backuputils'],
-    #'scripts': ['bin/s3-backup', 'bin/s3-restore'],
+    'scripts': ['bin/tar-to-s3', 'bin/untar-from-s3', 'bin/prune-s3-bucket'],
     'name': 's3backuputils'
 }
 

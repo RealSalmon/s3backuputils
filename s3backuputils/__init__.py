@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
-
+from jinja2 import Template
 
 class TarHelper:
 
@@ -38,6 +38,33 @@ class TarHelper:
 
         if delete:
             self.delete()
+
+    @classmethod
+    def tar_to_s3_entry(cls, opts):
+        archive = Template(opts.key_format).render(
+            directory=opts.directory.strip('/'),
+            timestamp=(int(time.time()))
+        )
+
+        tar = cls(archive, opts.directory)
+        tar.tar_to_s3(opts.bucket, opts.prefix)
+
+    @classmethod
+    def untar_from_s3_entry(cls, opts):
+
+        bh = S3BucketHelper(opts.bucket, opts.prefix)
+
+        tar = bh.get_tar_helper(
+            opts.directory,
+            opts.save_as,
+            cwd=opts.cwd,
+            most_recent=opts.key is None,
+            key=opts.key
+        )
+
+        tar.extract()
+        if opts.delete:
+            tar.delete()
 
 
 class S3BucketHelper:
@@ -96,13 +123,23 @@ class S3BucketHelper:
         return store
 
     def download(self, key, destination):
-        os.makedirs(os.path.dirname(os.path.abspath(destination)))
+
+        dir_path = os.path.dirname(os.path.abspath(destination))
+        if not os.path.isdir(dir_path):
+            os.makedirs(dir_path)
+
         Key(self.bucket, key).get_contents_to_filename(destination)
 
-    def get_tar_helper(self, archive_path, target_path, most_recent=False, key=None):
+    def get_tar_helper(self, target_path, archive_path=None, most_recent=False, key=None, cwd=None):
 
         if most_recent:
             key = self.get_most_recent_key()
+
+        if archive_path is None:
+            archive_path = os.path.basename(key)
+
+        if cwd is not None:
+            archive_path = os.path.join(cwd, archive_path)
 
         self.download(key, archive_path)
         return TarHelper(
@@ -117,3 +154,16 @@ class S3BucketHelper:
         deletes = [o['name'] for o in keys if o['time'] < min_time]
 
         self.bucket.delete_keys(deletes)
+
+    @classmethod
+    def prune_entry(cls, opts):
+
+        threshold = None
+
+        if opts.days is not None:
+            threshold = float(opts.days*86400)
+        elif opts.seconds is not None:
+            threshold = float(opts.seconds)
+
+        if threshold is not None:
+            cls(opts.bucket, opts.prefix).prune(threshold)
