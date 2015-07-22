@@ -1,0 +1,17 @@
+#!/usr/bin/env python
+
+from argparse import ArgumentParser
+import s3backuputils
+
+
+if __name__ == '__main__':
+    aparser = ArgumentParser()
+    aparser.add_argument("-b", "--bucket", dest="bucket", required=True,
+                         help="S3 BUCKET that the archive is in", metavar="BUCKET")
+    aparser.add_argument("-p", "--prefix", dest="prefix", required=True,
+                         help="Key PREFIX for archive's location in S3", metavar="PREFIX")
+    aparser.add_argument("-s" "--seconds", dest="seconds", metavar="SECONDS", default=None,
+                         help="Delete files older than this number of seconds")
+    aparser.add_argument("-d", "--days", dest="days", metavar="DAYS", default=None,
+                        help="Delete files oder than this number of days")
+    s3backuputils.S3BucketHelper.prune_entry(aparser.parse_args())
