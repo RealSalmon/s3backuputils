@@ -89,7 +89,7 @@ def test_tar_to_s3():
 
 
 @mock_s3
-def test_untar_from_s3():
+def test_untar_from_s3(check_empty=False):
 
     bucket_name = str(uuid.uuid4())
     prefix = '{0}/'.format(str(uuid.uuid4()))
@@ -118,11 +118,18 @@ def test_untar_from_s3():
     )
     target_path = os.path.join(_outdir, str(uuid.uuid4()))
 
+    if check_empty:
+        bucket.prefix = str(uuid.uuid4())
+
     tar2 = bucket.get_tar_helper(
         most_recent=True,
         archive_path=archive_path,
         target_path=target_path
     )
+
+    if check_empty:
+        assert tar2 is None
+        return
 
     assert os.path.isfile(archive_path)
 
@@ -137,6 +144,11 @@ def test_untar_from_s3():
         assert os.path.isdir(dirpath)
         for xfile in range(1, 10):
             assert os.path.isfile(os.path.join(dirpath, 'file_{0}'.format(xfile)))
+
+
+@mock_s3
+def test_untar_from_s3_empty():
+    return test_untar_from_s3(check_empty=True)
 
 
 @mock_s3
@@ -174,6 +186,7 @@ def test_prune():
     current_keys = helper2.get_keys_by_last_modified()
     assert len(current_keys) == 100
     assert len([k for k in current_keys if k['name'] in keys]) == 100
+
 
 @mock_s3
 def test_script_prune():
@@ -220,7 +233,7 @@ def test_script_prune():
 
 
 @mock_s3
-def test_scripts_tar_to_s3_and_back():
+def test_scripts_tar_to_s3_and_back(check_empty=False):
 
     bucket_name = str(uuid.uuid4())
     prefix = '{0}/'.format(str(uuid.uuid4()))
@@ -245,18 +258,28 @@ def test_scripts_tar_to_s3_and_back():
     assert bucket.get_most_recent_key() == '{0}{1}.tar.gz'.format(prefix, tar_name)
 
     target_path = os.path.join(_outdir, os.path.dirname(__file__), 'testfiles')
-    mock_args = namedtuple('mock_args', 'directory prefix bucket cwd delete save_as key')
+    mock_args = namedtuple('mock_args', 'directory prefix bucket cwd delete save_as key ignore_missing')
     args = mock_args(directory=target_path,
-                     prefix=prefix,
+                     prefix=prefix if not check_empty else str(uuid.uuid4()),
                      bucket=bucket_name,
                      delete=True,
                      cwd=_outdir,
                      save_as=None,
-                     key=None)
-    TarHelper.untar_from_s3_entry(args)
+                     key=None,
+                     ignore_missing=True if check_empty else False)
 
-    for xdir in range(1, 3):
-        dirpath = os.path.join(target_path, 'dir_{0}'.format(xdir))
-        assert os.path.isdir(dirpath)
-        for xfile in range(1, 10):
-            assert os.path.isfile(os.path.join(dirpath, 'file_{0}'.format(xfile)))
+    result = TarHelper.untar_from_s3_entry(args)
+
+    if check_empty:
+        assert result is False
+    else:
+        for xdir in range(1, 3):
+            dirpath = os.path.join(target_path, 'dir_{0}'.format(xdir))
+            assert os.path.isdir(dirpath)
+            for xfile in range(1, 10):
+                assert os.path.isfile(os.path.join(dirpath, 'file_{0}'.format(xfile)))
+
+
+@mock_s3
+def test_script_untar_from_s3_empty():
+    test_scripts_tar_to_s3_and_back(check_empty=True)

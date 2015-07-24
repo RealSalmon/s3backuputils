@@ -20,5 +20,8 @@ if __name__ == '__main__':
                          help="Set the base directory to use when storing the archive on the filesystem")
     aparser.add_argument("-s", "--save-as", dest="save_as", metavar="SAVE_AS", default=None,
                          help="Set the filename to use when storing the archive on the filesystem")
+    aparser.add_argument("-i", "--ignore-missing", dest="ignore_missing", metavar="IGNORE_MISSING", default=False,
+                         help="Ignore failures caused by missing backup when KEY is empty")
+
 
     s3backuputils.TarHelper.untar_from_s3_entry(aparser.parse_args())
