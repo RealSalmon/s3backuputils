@@ -283,3 +283,14 @@ def test_scripts_tar_to_s3_and_back(check_empty=False):
 @mock_s3
 def test_script_untar_from_s3_empty():
     test_scripts_tar_to_s3_and_back(check_empty=True)
+
+
+def test_bucket_prefix_as_dir():
+    bh = S3BucketHelper(
+        'yadda',
+        'yadda/yadda'
+    )
+    assert bh.prefix == 'yadda/yadda/'
+
+    bh.prefix = 'succint/'
+    assert bh.prefix == 'succint/'

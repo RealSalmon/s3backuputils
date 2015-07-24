@@ -80,10 +80,11 @@ class TarHelper:
         return True
 
 
-class S3BucketHelper:
+class S3BucketHelper(object):
 
     _client = None
     _bucket = None
+    _prefix = None
 
     profile_name = None
     bucket_name = None
@@ -97,6 +98,15 @@ class S3BucketHelper:
                 validate=False
             )
         return self._bucket
+
+    @property
+    def prefix(self):
+        return self._prefix
+
+    @prefix.setter
+    def prefix(self, value):
+        print value[-1]
+        self._prefix = '{0}{1}'.format(value, '' if value[-1] == '/' else '/')
 
     @property
     def client(self):
