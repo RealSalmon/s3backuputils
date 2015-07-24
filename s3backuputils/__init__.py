@@ -7,6 +7,11 @@ from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from jinja2 import Template
 
+
+class NoRecentKeyFound(Exception):
+    pass
+
+
 class TarHelper:
 
     archive_path = None
@@ -62,9 +67,17 @@ class TarHelper:
             key=opts.key
         )
 
+        if tar is None and opts.key is None:
+            if opts.ignore_missing:
+                return False
+            else:
+                raise NoRecentKeyFound
+
         tar.extract()
         if opts.delete:
             tar.delete()
+
+        return True
 
 
 class S3BucketHelper:
@@ -134,6 +147,8 @@ class S3BucketHelper:
 
         if most_recent:
             key = self.get_most_recent_key()
+            if key is None:
+                return None
 
         if archive_path is None:
             archive_path = os.path.basename(key)
