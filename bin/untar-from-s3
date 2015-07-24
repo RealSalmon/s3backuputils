@@ -14,7 +14,7 @@ if __name__ == '__main__':
                          help="Key PREFIX for archive's location in S3", metavar="PREFIX")
     aparser.add_argument("-k", "--key", dest="key", metavar="KEY", default=None,
                          help="The key or filename of the archive.")
-    aparser.add_argument("-x", "--delete", dest="delete", metvar="DELETE", default=True,
+    aparser.add_argument("-x", "--delete", dest="delete", metavar="DELETE", default=True,
                          help="Delete the archive from the filesystem after it has been restored.")
     aparser.add_argument("-c", "--cwd", dest="cwd", metavar="CWD", default=None,
                          help="Set the base directory to use when storing the archive on the filesystem")
