@@ -47,7 +47,7 @@ class TarHelper:
     @classmethod
     def tar_to_s3_entry(cls, opts):
         archive = Template(opts.key_format).render(
-            directory=opts.directory.strip('/'),
+            directory=os.path.basename(opts.directory.rstrip('/')),
             timestamp=(int(time.time()))
         )
 
